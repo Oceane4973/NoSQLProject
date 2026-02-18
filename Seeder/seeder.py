@@ -4,10 +4,12 @@ import json
 import os
 import random
 from faker import Faker
+from faker_commerce import Provider
 import signal
 import sys
 
 fake = Faker('fr_FR')
+fake.add_provider(Provider)
 
 async def post_bulk(session, endpoint, data):
     url = f"{os.getenv('SERVER_URL', 'http://localhost:3001')}/api/DataSeeder/{endpoint}"
@@ -26,7 +28,7 @@ def generate_articles(count: int) -> list[dict]:
     return [
         {
             "id": str(fake.uuid4()),
-            "name": fake.ecommerce_product(),
+            "name": fake.ecommerce_name(),
             "price": round(random.uniform(5, 500), 2)
         }
         for _ in range(count)

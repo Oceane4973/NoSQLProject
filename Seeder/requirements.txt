@@ -1,2 +1,3 @@
 aiohttp==3.9.5
 faker==28.1.0
+faker-commerce==1.0.4

@@ -48,19 +48,40 @@ public class PostgresDbService : IPostgresDbService
     {
         var query = _dbContext.Articles.AsQueryable();
 
+        if (request.UserId.HasValue)
+        {
+            var targetUserIds = new List<Guid> { request.UserId.Value };
+
+            if (request.FollowingLevel > 0)
+            {
+                var recursiveSql = @"
+                WITH RECURSIVE SocialCircle AS (
+                    -- Niveau 0 : l'utilisateur de départ
+                    SELECT CAST({0} AS UUID) as UserId, 0 as Level
+                    UNION
+                    -- Niveaux suivants : ceux que les gens du niveau précédent suivent
+                    SELECT uf.""FollowingId"", sc.Level + 1
+                    FROM ""UserFollow"" uf
+                    INNER JOIN SocialCircle sc ON uf.""FollowerId"" = sc.UserId
+                    WHERE sc.Level < {1}
+                )
+                SELECT DISTINCT UserId FROM SocialCircle";
+
+                var circleIds = await _dbContext.Database
+                    .SqlQueryRaw<Guid>(recursiveSql, request.UserId.Value, request.FollowingLevel)
+                    .ToListAsync();
+
+                query = query.Where(a => a.Orders.Any(o => circleIds.Contains(o.UserId)));
+            }
+            else
+            {
+                query = query.Where(a => a.Orders.Any(o => o.UserId == request.UserId));
+            }
+        }
+
         if (request.ArticleIds != null && request.ArticleIds.Any())
         {
             query = query.Where(a => request.ArticleIds.Contains(a.Id));
-        }
-
-        if (request.UserId.HasValue)
-        {
-            query = query.Where(a => a.Orders.Any(o => o.UserId == request.UserId));
-            if (request.OnlyFromFollowing)
-            {
-                query = query.Where(a => a.Orders.Any(o =>
-                    _dbContext.Users.Any(u => u.Id == request.UserId && u.Following.Any(f => f.Id == o.UserId))));
-            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))

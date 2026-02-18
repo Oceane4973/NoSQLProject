@@ -10,9 +10,14 @@ namespace Server.Data;
 public class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : DbContext(options)
 {
     /// <summary>
-    /// User DbSet
+    /// Users DbSet
     /// </summary>
     public DbSet<User> Users { get; set; }
+
+    /// <summary>
+    /// UserFollows DbSet
+    /// </summary>
+    public DbSet<UserFollow> UserFollows { get; set; }
 
     /// <summary>
     /// Articles DbSet
@@ -32,17 +37,26 @@ public class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : Db
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<User>()
-            .HasMany(u => u.Followers)
-            .WithMany(u => u.Following)
-            .UsingEntity<Dictionary<string, object>>(
-                "UserFollows",
-                j => j.HasOne<User>().WithMany().HasForeignKey("FollowerId"),
-                j => j.HasOne<User>().WithMany().HasForeignKey("FollowingId")
-            );
+        modelBuilder.Entity<UserFollow>(entity =>
+        {
+            entity.ToTable("UserFollows");
+            entity.HasKey(f => new { f.FollowerId, f.FollowingId });
+
+            entity.HasOne(f => f.Follower)
+                  .WithMany(u => u.Following)
+                  .HasForeignKey(f => f.FollowerId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(f => f.Following)
+                  .WithMany(u => u.Followers)
+                  .HasForeignKey(f => f.FollowingId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<Order>(entity =>
         {
+            entity.ToTable("Orders");
+
             entity.HasOne(o => o.User)
                   .WithMany(u => u.Orders)
                   .HasForeignKey(o => o.UserId);
@@ -50,6 +64,11 @@ public class PostgresDbContext(DbContextOptions<PostgresDbContext> options) : Db
             entity.HasOne(o => o.Article)
                   .WithMany(a => a.Orders)
                   .HasForeignKey(o => o.ArticleId);
+        });
+
+        modelBuilder.Entity<Article>(entity =>
+        {
+            entity.ToTable("Articles");
         });
     }
 }

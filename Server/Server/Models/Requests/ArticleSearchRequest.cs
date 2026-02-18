@@ -33,9 +33,9 @@ public class ArticleSearchRequest
     public Guid? UserId { get; set; }
 
     /// <summary>
-    /// If true, return only articles sold by users that the requesting user follows. Requires UserId to be set.
+    /// Filter articles based on how closely the seller is followed by the requesting user. Requires UserId to be set.
     /// </summary>
-    public bool OnlyFromFollowing { get; set; }
+    public int? FollowingLevel { get; set; }
 
     /// <summary>
     /// Filter by price range.

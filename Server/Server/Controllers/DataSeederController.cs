@@ -90,28 +90,15 @@ public class DataSeederController : ControllerBase
     [HttpPost("social-graph")]
     public async Task<IActionResult> BulkImportSocialGraph([FromBody] List<FollowDto> follows)
     {
-        var userIds = follows.SelectMany(f => new[] { f.FollowerId, f.FollowingId }).Distinct().ToList();
-
-        var users = await _context.Users
-            .Where(u => userIds.Contains(u.Id))
-            .Include(u => u.Followers)
-            .Include(u => u.Following)
-            .ToListAsync();
-
-        foreach (var follow in follows)
+        var entities = follows.Select(f => new UserFollow
         {
-            var follower = users.First(u => u.Id == follow.FollowerId);
-            var following = users.First(u => u.Id == follow.FollowingId);
+            FollowerId = f.FollowerId,
+            FollowingId = f.FollowingId
+        }).ToList();
 
-            if (!follower.Following.Contains(following))
-                follower.Following.Add(following);
+        await _context.BulkInsertAsync(entities, b => b.IncludeGraph = false);
 
-            if (!following.Followers.Contains(follower))
-                following.Followers.Add(follower);
-        }
-
-        await _context.BulkSaveChangesAsync();
-        return Ok(new { Count = follows.Count, Message = "Social graph imported" });
+        return Ok(new { Count = entities.Count, Message = "Social graph imported" });
     }
 
     /// <summary>

@@ -12,14 +12,13 @@
         /// User email
         public string Email { get; set; } = null!;
 
+        /// Followers
+        public List<UserFollow> Followers { get; set; } = new();
 
-        /// User followers
-        public List<User> Followers { get; set; } = new List<User>();
+        /// Following
+        public List<UserFollow> Following { get; set; } = new();
 
-        /// User following
-        public List<User> Following { get; set; } = new();
-
-        /// User orders
-        public List<Order> Orders { get; set; } = new List<Order>();
+        /// Orders
+        public List<Order> Orders { get; set; } = new();
     }
 }
