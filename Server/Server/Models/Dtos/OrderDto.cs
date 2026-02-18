@@ -7,6 +7,7 @@
     /// <param name="UserId"></param>
     /// <param name="ArticleId"></param>
     /// <param name="Quantity"></param>
-    public record OrderDto(Guid Id, Guid UserId, Guid ArticleId, int Quantity);
+    /// /// <param name="TotalPrice"></param>
+    public record OrderDto(Guid Id, Guid UserId, Guid ArticleId, int Quantity, decimal TotalPrice);
 
 }

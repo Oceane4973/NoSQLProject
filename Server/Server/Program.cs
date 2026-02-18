@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi;
+using Neo4j.Driver;
 using Serilog;
 using Server.Data;
 using Server.Services;
@@ -36,7 +37,32 @@ builder.Services.AddDbContext<PostgresDbContext>(options =>
 
 
 // Services
-builder.Services.AddScoped<IPostgresDbService, PostgresDbService>();
+builder.Services.AddSingleton<IDriver>(sp =>
+{
+    var config = builder.Configuration;
+
+    var uri = config["NEO4J_BOLT_URL"];
+    var user = config["NEO4J_USER"];
+    var password = config["NEO4J_PASSWORD"];
+
+    var driver = GraphDatabase.Driver(uri, AuthTokens.Basic(user, password));
+
+    try
+    {
+        driver.VerifyConnectivityAsync().Wait(5000);
+        Console.WriteLine($"Neo4j connected: {uri}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Neo4j connection failed: {ex.Message}");
+        throw;
+    }
+
+    return driver;
+});
+
+builder.Services.AddScoped<PostgresDbService>();
+builder.Services.AddScoped<Neo4jDbService>();
 
 // Controllers
 builder.Services.AddControllers()

@@ -26,6 +26,11 @@
         public int PageSize { get; set; }
 
         /// <summary>
+        /// Request time
+        /// </summary>
+        public long RequestTimeInMilliseconds { get; set; }
+
+        /// <summary>
         /// Total number of pages
         /// </summary>
         public int TotalPages => (TotalCount + PageSize - 1) / PageSize;

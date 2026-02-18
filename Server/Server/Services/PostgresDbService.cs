@@ -1,28 +1,21 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using EFCore.BulkExtensions;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Models.Domains;
+using Server.Models.Dtos;
 using Server.Models.Requests;
 using Server.Models.Requests.Enums;
 using Server.Models.Requests.Enums.Fields;
 using Server.Models.Responses;
+using System.Diagnostics;
 
 namespace Server.Services;
 
 /// <summary>
-/// Interface for postgres business service
-/// </summary>
-public interface IPostgresDbService
-{
-    /// <summary>
-    /// Execute complex query via QueryBuilder
-    /// </summary>
-    Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request);
-}
-
-/// <summary>
 /// Implementation of user business service
 /// </summary>
-public class PostgresDbService : IPostgresDbService
+public class PostgresDbService : IDbService
 {
     private readonly PostgresDbContext _context;
     private readonly ILogger<PostgresDbService> _logger;
@@ -43,15 +36,34 @@ public class PostgresDbService : IPostgresDbService
     /// </summary>
     public async Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request)
     {
+        var stopwatch = Stopwatch.StartNew();
+
         _logger.LogInformation("Executing QueryBuilder: Entity={Entity}", request.Entity);
 
-        return request.Entity switch
+        try
         {
-            Entity.Articles => await ExecuteArticlesQuery(request),
-            Entity.Users => await ExecuteUsersQuery(request),
-            Entity.Orders => await ExecuteOrdersQuery(request),
-            _ => throw new ArgumentException($"Entity {request.Entity} not supported")
-        };
+            var result = request.Entity switch
+            {
+                Entity.Articles => await ExecuteArticlesQuery(request),
+                Entity.Users => await ExecuteUsersQuery(request),
+                Entity.Orders => await ExecuteOrdersQuery(request),
+                _ => throw new ArgumentException($"Entity {request.Entity} not supported")
+            };
+
+            stopwatch.Stop();
+            result.RequestTimeInMilliseconds = stopwatch.ElapsedMilliseconds;
+
+            _logger.LogInformation("QueryBuilder OK: Entity={Entity}, Time={Time}ms, Count={Count}",
+                request.Entity, result.RequestTimeInMilliseconds, result.TotalCount);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "QueryBuilder ERROR: Entity={Entity}, Time={Time}ms", request.Entity, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
 
     /// <summary>
@@ -298,5 +310,76 @@ public class PostgresDbService : IPostgresDbService
         };
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="articles"></param>
+    /// <returns></returns>
+    public async Task BulkImportArticles([FromBody] List<ArticleDto> articles)
+    {
+        var entities = articles.Select(a => new Article
+        {
+            Id = a.Id,
+            Name = a.Name,
+            Price = a.Price
+        }).ToList();
+
+        await _context.BulkInsertAsync(entities);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="users"></param>
+    /// <returns></returns>
+    public async Task BulkImportUsers([FromBody] List<UserDto> users)
+    {
+        var entities = users.Select(u => new User
+        {
+            Id = u.Id,
+            Name = u.UserName,
+            Email = u.Email
+        }).ToList();
+
+        await _context.BulkInsertAsync(entities);
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="orders"></param>
+    /// <returns></returns>
+    public async Task BulkImportOrders([FromBody] List<OrderDto> orders)
+    {
+        var entities = orders.Select(o => new Order
+        {
+            Id = o.Id,
+            UserId = o.UserId,
+            ArticleId = o.ArticleId,
+            Quantity = o.Quantity
+        }).ToList();
+
+        await _context.BulkInsertAsync(entities);
+    }
+
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="follows"></param>
+    /// <returns></returns>
+    public async Task BulkImportSocialGraph([FromBody] List<FollowDto> follows)
+    {
+        var entities = follows
+            .GroupBy(f => new { f.FollowerId, f.FollowingId })
+            .Select(g => new UserFollow
+            {
+                FollowerId = g.Key.FollowerId,
+                FollowingId = g.Key.FollowingId
+            })
+            .ToList();
+
+        await _context.BulkInsertAsync(entities, b => b.IncludeGraph = false);
+    }
 
 }
