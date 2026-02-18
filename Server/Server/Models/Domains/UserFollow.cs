@@ -1,5 +1,8 @@
 ﻿namespace Server.Models.Domains
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public class UserFollow
     {
         /// Composite key of FollowerId and FollowingId

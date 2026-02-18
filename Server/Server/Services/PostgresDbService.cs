@@ -3,6 +3,7 @@ using Server.Data;
 using Server.Models.Domains;
 using Server.Models.Requests;
 using Server.Models.Requests.Enums;
+using Server.Models.Requests.Enums.Fields;
 using Server.Models.Responses;
 
 namespace Server.Services;
@@ -13,9 +14,9 @@ namespace Server.Services;
 public interface IPostgresDbService
 {
     /// <summary>
-    /// Search specific artickes
+    /// Execute complex query via QueryBuilder
     /// </summary>
-    Task<PaginatedResult<Article>> SearchArticlesAsync(ArticleSearchRequest request);
+    Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request);
 }
 
 /// <summary>
@@ -23,20 +24,34 @@ public interface IPostgresDbService
 /// </summary>
 public class PostgresDbService : IPostgresDbService
 {
-    private readonly PostgresDbContext _dbContext;
+    private readonly PostgresDbContext _context;
     private readonly ILogger<PostgresDbService> _logger;
 
     /// <summary>
-    /// Constructor
+    /// 
     /// </summary>
     /// <param name="dbContext"></param>
     /// <param name="logger"></param>
-    public PostgresDbService(
-        PostgresDbContext dbContext,
-        ILogger<PostgresDbService> logger)
+    public PostgresDbService(PostgresDbContext dbContext, ILogger<PostgresDbService> logger)
     {
-        _dbContext = dbContext;
+        _context = dbContext;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Execute QueryBuilder par Entity (switch complet)
+    /// </summary>
+    public async Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request)
+    {
+        _logger.LogInformation("Executing QueryBuilder: Entity={Entity}", request.Entity);
+
+        return request.Entity switch
+        {
+            Entity.Articles => await ExecuteArticlesQuery(request),
+            Entity.Users => await ExecuteUsersQuery(request),
+            Entity.Orders => await ExecuteOrdersQuery(request),
+            _ => throw new ArgumentException($"Entity {request.Entity} not supported")
+        };
     }
 
     /// <summary>
@@ -44,93 +59,244 @@ public class PostgresDbService : IPostgresDbService
     /// </summary>
     /// <param name="request"></param>
     /// <returns></returns>
-    public async Task<PaginatedResult<Article>> SearchArticlesAsync(ArticleSearchRequest request)
+    private async Task<PaginatedResult<dynamic>> ExecuteArticlesQuery(QueryBuilderRequest request)
     {
-        var query = _dbContext.Articles.AsQueryable();
+        var query = _context.Articles.AsQueryable();
 
-        if (request.UserId.HasValue)
+        // FollowingLevel
+        if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
-            var currentLevelIds = new HashSet<Guid> { request.UserId.Value };
-            var allReachableUserIds = new HashSet<Guid> { request.UserId.Value };
-
-            for (int i = 0; i < request.FollowingLevel; i++)
-            {
-                var nextLevelIds = await _dbContext.UserFollows
-                    .Where(uf => currentLevelIds.Contains(uf.FollowerId))
-                    .Select(uf => uf.FollowingId)
-                    .Distinct()
-                    .ToListAsync();
-
-                var newIds = nextLevelIds.Except(allReachableUserIds).ToList();
-
-                if (!newIds.Any()) break;
-
-                foreach (var id in newIds) allReachableUserIds.Add(id);
-                currentLevelIds = new HashSet<Guid>(newIds);
-            }
-
-            query = query.Where(a => a.Orders.Any(o => allReachableUserIds.Contains(o.UserId)));
+            var reachableUsers = await GetReachableUsersAsync(request.UserId.Value, request.FollowingLevel.Value);
+            query = query.Where(a => a.Orders.Any(o => reachableUsers.Contains(o.UserId)));
         }
 
-        if (request.ArticleIds != null && request.ArticleIds.Any())
+        // ArticlesFields
+        foreach (var filter in request.Filters)
         {
-            query = query.Where(a => request.ArticleIds.Contains(a.Id));
+            query = ApplyArticlesFilter(query, (ArticlesFields)filter.FieldId);
         }
 
-        if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+        if (request.OrderByField is ArticlesOrderBy orderBy)
         {
-            query = query.Where(a => EF.Functions.ILike(a.Name, $"%{request.SearchTerm}%"));
-        }
-
-        if (request.MinPrice.HasValue) query = query.Where(a => a.Price >= request.MinPrice.Value);
-        if (request.MaxPrice.HasValue) query = query.Where(a => a.Price <= request.MaxPrice.Value);
-
-        if (request.IncludeSellerDetails)
-        {
-            query = query.Include(a => a.Orders).ThenInclude(o => o.User);
+            query = ApplyArticlesOrderBy(query, orderBy, request.OrderDirection);
         }
 
         var totalCount = await query.CountAsync();
-
-        query = ApplySorting(query, request);
-
-        var page = request.Page < 1 ? 1 : request.Page;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
-
-        var pagedArticles = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        var items = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(a => new { a.Id, a.Name, a.Price })
+            .Cast<dynamic>()
             .ToListAsync();
 
-        return new PaginatedResult<Article>
+        return new PaginatedResult<dynamic>
         {
-            Items = pagedArticles,
+            Items = items,
             TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
+            Page = request.Page,
+            PageSize = request.PageSize
         };
     }
-
-    private IQueryable<Article> ApplySorting(IQueryable<Article> query, ArticleSearchRequest request)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<PaginatedResult<dynamic>> ExecuteUsersQuery(QueryBuilderRequest request)
     {
-        var isDesc = request.IsDescending;
+        var query = _context.Users
+            .Include(u => u.Followers)
+            .Include(u => u.Following)
+            .AsQueryable();
 
-        return request.OrderBy switch
+        if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
-            ArticleFilterOrderBy.Name =>
-                isDesc ? query.OrderByDescending(a => a.Name) : query.OrderBy(a => a.Name),
+            var reachableUsers = await GetReachableUsersAsync(request.UserId.Value, request.FollowingLevel.Value);
+            query = query.Where(u => reachableUsers.Contains(u.Id));
+        }
 
-            ArticleFilterOrderBy.Price =>
-                isDesc ? query.OrderByDescending(a => a.Price) : query.OrderBy(a => a.Price),
+        foreach (var filter in request.Filters)
+        {
+            query = ApplyUsersFilter(query, (UsersFields)filter.FieldId);
+        }
 
-            ArticleFilterOrderBy.MostSold =>
-                isDesc ? query.OrderByDescending(a => a.Orders.Count) : query.OrderBy(a => a.Orders.Count),
+        if (request.OrderByField is UsersOrderBy orderBy)
+        {
+            query = ApplyUsersOrderBy(query, orderBy, request.OrderDirection);
 
-            ArticleFilterOrderBy.SellerPopularity =>
-                isDesc ? query.OrderByDescending(a => a.Orders.Select(o => o.User.Followers.Count).DefaultIfEmpty(0).Max())
-                       : query.OrderBy(a => a.Orders.Select(o => o.User.Followers.Count).DefaultIfEmpty(0).Max()),
+        }
 
-            _ => query.OrderByDescending(a => a.Id)
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(u => new
+            {
+                u.Id,
+                u.Name,
+                u.Email,
+                FollowersCount = u.Followers.Count,
+                FollowingCount = u.Following.Count
+            })
+            .Cast<dynamic>()
+            .ToListAsync();
+
+        return new PaginatedResult<dynamic>
+        {
+            Items = items.Cast<dynamic>().ToList(),
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
         };
     }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<PaginatedResult<dynamic>> ExecuteOrdersQuery(QueryBuilderRequest request)
+    {
+        var query = _context.Orders
+            .Include(o => o.Article)
+            .Include(o => o.User)
+            .AsQueryable();
+
+        if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
+        {
+            var reachableUsers = await GetReachableUsersAsync(request.UserId.Value, request.FollowingLevel.Value);
+            query = query.Where(o => reachableUsers.Contains(o.UserId));
+        }
+
+        foreach (var filter in request.Filters)
+        {
+            query = ApplyOrdersFilter(query, (OrdersFields)filter.FieldId);
+        }
+
+        if (request.OrderByField is OrdersOrderBy orderBy)
+        {
+            query = ApplyOrdersOrderBy(query, orderBy, request.OrderDirection);
+
+        }
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(o => new
+            {
+                o.Id,
+                o.UserId,
+                o.ArticleId,
+                o.Quantity,
+                TotalPrice = o.Quantity * o.Article.Price
+            })
+            .ToListAsync();
+
+        return new PaginatedResult<dynamic>
+        {
+            Items = items.Cast<dynamic>().ToList(),
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <param name="levels"></param>
+    /// <returns></returns>
+    private async Task<HashSet<Guid>> GetReachableUsersAsync(Guid userId, int levels)
+    {
+        var currentLevelIds = new HashSet<Guid> { userId };
+        var allReachableUserIds = new HashSet<Guid> { userId };
+
+        for (int i = 0; i < levels; i++)
+        {
+            var nextLevelIds = await _context.UserFollows
+                .Where(uf => currentLevelIds.Contains(uf.FollowerId))
+                .Select(uf => uf.FollowingId)
+                .Distinct()
+                .ToListAsync();
+
+            var newIds = nextLevelIds.Except(allReachableUserIds);
+            if (!newIds.Any()) break;
+
+            foreach (var id in newIds) allReachableUserIds.Add(id);
+            currentLevelIds = new HashSet<Guid>(newIds);
+        }
+
+        return allReachableUserIds;
+    }
+
+    private static IQueryable<Article> ApplyArticlesFilter(IQueryable<Article> query, ArticlesFields field)
+    {
+        return field switch
+        {
+            ArticlesFields.Price => query.Where(a => a.Price > 0),
+            ArticlesFields.Name => query.Where(a => !string.IsNullOrEmpty(a.Name)),
+            _ => query
+        };
+    }
+
+    private static IQueryable<User> ApplyUsersFilter(IQueryable<User> query, UsersFields field)
+    {
+        return field switch
+        {
+            UsersFields.FollowersCount => query.Where(u => u.Followers.Any()),
+            _ => query
+        };
+    }
+
+    private static IQueryable<Order> ApplyOrdersFilter(IQueryable<Order> query, OrdersFields field)
+    {
+        return field switch
+        {
+            OrdersFields.TotalPrice => query.Where(o => o.TotalPrice > 0),
+            _ => query
+        };
+    }
+
+    private IQueryable<Article> ApplyArticlesOrderBy(IQueryable<Article> query, ArticlesOrderBy field, OrderDirection direction)
+    {
+        return (field, direction) switch
+        {
+            (ArticlesOrderBy.Id, OrderDirection.Ascending) => query.OrderBy(a => a.Id),
+            (ArticlesOrderBy.Id, OrderDirection.Descending) => query.OrderByDescending(a => a.Id),
+            (ArticlesOrderBy.Name, OrderDirection.Ascending) => query.OrderBy(a => a.Name),
+            (ArticlesOrderBy.Name, OrderDirection.Descending) => query.OrderByDescending(a => a.Name),
+            (ArticlesOrderBy.Price, OrderDirection.Ascending) => query.OrderBy(a => a.Price),
+            (ArticlesOrderBy.Price, OrderDirection.Descending) => query.OrderByDescending(a => a.Price),
+            _ => query.OrderByDescending(a => a.Id) // Default
+        };
+    }
+
+    private IQueryable<User> ApplyUsersOrderBy(IQueryable<User> query, UsersOrderBy field, OrderDirection direction)
+    {
+        return (field, direction) switch
+        {
+            (UsersOrderBy.Id, OrderDirection.Ascending) => query.OrderBy(u => u.Id),
+            (UsersOrderBy.Id, OrderDirection.Descending) => query.OrderByDescending(u => u.Id),
+            (UsersOrderBy.UserName, OrderDirection.Ascending) => query.OrderBy(u => u.Name),
+            (UsersOrderBy.FollowersCount, OrderDirection.Descending) => query.OrderByDescending(u => u.Followers.Count),
+            _ => query.OrderByDescending(u => u.Id)
+        };
+    }
+
+    private IQueryable<Order> ApplyOrdersOrderBy(IQueryable<Order> query, OrdersOrderBy field, OrderDirection direction)
+    {
+        return (field, direction) switch
+        {
+            (OrdersOrderBy.Id, OrderDirection.Ascending) => query.OrderBy(o => o.Id),
+            (OrdersOrderBy.Id, OrderDirection.Descending) => query.OrderByDescending(o => o.Id),
+            (OrdersOrderBy.Quantity, OrderDirection.Ascending) => query.OrderBy(o => o.Quantity),
+            (OrdersOrderBy.Quantity, OrderDirection.Descending) => query.OrderByDescending(o => o.Quantity),
+            (OrdersOrderBy.TotalPrice, OrderDirection.Descending) => query.OrderByDescending(o => o.TotalPrice),
+            _ => query.OrderByDescending(o => o.Id)
+        };
+    }
+
+
 }
