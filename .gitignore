@@ -1,0 +1,59 @@
+.env
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.DotSettings.user
+.vs/
+
+## Rider / ReSharper
+idea/
+_ReSharper*/
+*.ReSharper
+.idea
+
+## Visual Studio
+vs/
+
+## Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug*/
+[Rr]elease*/
+artifacts/
+
+## Logs and temp files
+*.log
+*.tmp
+
+## Test results
+[Tt]est[Rr]esult*/
+*.VisualState.xml
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Node.js (if applicable)
+node_modules/
+
+## Publish output
+publish/
+*.pubxml
+
+## OS-specific
+DS_Store
+Thumbs.db
+
+# Https certificates
+https/
+*.pfx
+*.cer
+*.pem
+
+# Logs from ASP.NET Core
+LogFiles/
+/.vs/UserService.slnx/FileContentIndex/9644e4ce-8595-4ce5-b055-a1c4b53816d0.vsidx
+/.vs/UserService.slnx
