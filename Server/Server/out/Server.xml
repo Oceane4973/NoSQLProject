@@ -1,0 +1,348 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Server</name>
+    </assembly>
+    <members>
+        <member name="T:Server.Controllers.SocialNetworkController">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="M:Server.Controllers.SocialNetworkController.#ctor(Server.Services.IPostgresDbService,Microsoft.Extensions.Logging.ILogger{Server.Controllers.SocialNetworkController})">
+            <summary>
+            
+            </summary>
+            <param name="postgresDbService"></param>
+            <param name="logger"></param>
+        </member>
+        <member name="M:Server.Controllers.SocialNetworkController.SearchArticles(BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest)">
+            <summary>
+            
+            </summary>
+            <param name="request"></param>
+            <returns></returns>
+        </member>
+        <member name="T:Server.Data.PostgresDbContext">
+            <summary>
+            
+            </summary>
+            <param name="options"></param>
+        </member>
+        <member name="M:Server.Data.PostgresDbContext.#ctor(Microsoft.EntityFrameworkCore.DbContextOptions{Server.Data.PostgresDbContext})">
+            <summary>
+            
+            </summary>
+            <param name="options"></param>
+        </member>
+        <member name="P:Server.Data.PostgresDbContext.Users">
+            <summary>
+            User DbSet
+            </summary>
+        </member>
+        <member name="P:Server.Data.PostgresDbContext.Articles">
+            <summary>
+            Articles DbSet
+            </summary>
+        </member>
+        <member name="P:Server.Data.PostgresDbContext.Orders">
+            <summary>
+            Orders DbSet
+            </summary>
+        </member>
+        <member name="M:Server.Data.PostgresDbContext.OnModelCreating(Microsoft.EntityFrameworkCore.ModelBuilder)">
+            <summary>
+            
+            </summary>
+            <param name="modelBuilder"></param>
+        </member>
+        <member name="T:Server.Data.PostgresDbContextFactory">
+            <summary>
+            To create the DbContext at design time for migrations and other EF Core tools.
+            </summary>
+        </member>
+        <member name="M:Server.Data.PostgresDbContextFactory.CreateDbContext(System.String[])">
+            <summary>
+            
+            </summary>
+            <param name="args"></param>
+            <returns></returns>
+        </member>
+        <member name="T:Server.Migrations.InitDatabase">
+            <inheritdoc />
+        </member>
+        <member name="M:Server.Migrations.InitDatabase.Up(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:Server.Migrations.InitDatabase.Down(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:Server.Migrations.InitDatabase.BuildTargetModel(Microsoft.EntityFrameworkCore.ModelBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="T:Server.Models.Domains.Article">
+            Article model
+        </member>
+        <member name="P:Server.Models.Domains.Article.Id">
+            Article ID
+        </member>
+        <member name="P:Server.Models.Domains.Article.Name">
+            Article name
+        </member>
+        <member name="P:Server.Models.Domains.Article.Price">
+            Article price
+        </member>
+        <member name="P:Server.Models.Domains.Article.Orders">
+            To inverse the navigation
+        </member>
+        <member name="T:Server.Models.Domains.Order">
+            Order model
+        </member>
+        <member name="P:Server.Models.Domains.Order.Id">
+            Order ID
+        </member>
+        <member name="P:Server.Models.Domains.Order.UserId">
+            User ID
+        </member>
+        <member name="P:Server.Models.Domains.Order.ArticleId">
+            Article ID
+        </member>
+        <member name="P:Server.Models.Domains.Order.Quantity">
+            Article quantity
+        </member>
+        <member name="P:Server.Models.Domains.Order.User">
+            To reverse the navigation
+        </member>
+        <member name="P:Server.Models.Domains.Order.Article">
+            To reverse the navigation
+        </member>
+        <member name="P:Server.Models.Domains.Order.TotalPrice">
+            Total price of the order
+        </member>
+        <member name="T:Server.Models.Domains.User">
+            User model
+        </member>
+        <member name="P:Server.Models.Domains.User.Id">
+            User ID
+        </member>
+        <member name="P:Server.Models.Domains.User.Name">
+            User name
+        </member>
+        <member name="P:Server.Models.Domains.User.Email">
+            User email
+        </member>
+        <member name="P:Server.Models.Domains.User.Followers">
+            User followers
+        </member>
+        <member name="P:Server.Models.Domains.User.Following">
+            User following
+        </member>
+        <member name="P:Server.Models.Domains.User.Orders">
+            User orders
+        </member>
+        <member name="T:Server.Models.Dtos.Enums.ArticleFilterOrderBy">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="F:Server.Models.Dtos.Enums.ArticleFilterOrderBy.Name">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="F:Server.Models.Dtos.Enums.ArticleFilterOrderBy.Price">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="F:Server.Models.Dtos.Enums.ArticleFilterOrderBy.SellerPopularity">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="F:Server.Models.Dtos.Enums.ArticleFilterOrderBy.MostSold">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="T:Server.Models.Dtos.PaginatedResult`1">
+            <summary>
+            Paginated result container
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.Items">
+            <summary>
+            List of items in current page
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.TotalCount">
+            <summary>
+            Total number of items
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.Page">
+            <summary>
+            Current page number (1-based)
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.PageSize">
+            <summary>
+            Number of items per page
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.TotalPages">
+            <summary>
+            Total number of pages
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.HasNextPage">
+            <summary>
+            Whether there is a next page
+            </summary>
+        </member>
+        <member name="P:Server.Models.Dtos.PaginatedResult`1.HasPreviousPage">
+            <summary>
+            Whether there is a previous page
+            </summary>
+        </member>
+        <member name="T:Server.Services.IPostgresDbService">
+            <summary>
+            Interface for postgres business service
+            </summary>
+        </member>
+        <member name="M:Server.Services.IPostgresDbService.SearchArticlesAsync(BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest)">
+            <summary>
+            Search specific artickes
+            </summary>
+        </member>
+        <member name="T:Server.Services.PostgresDbService">
+            <summary>
+            Implementation of user business service
+            </summary>
+        </member>
+        <member name="M:Server.Services.PostgresDbService.#ctor(System.Net.Http.IHttpClientFactory,Microsoft.Extensions.Configuration.IConfiguration,Server.Data.PostgresDbContext,Microsoft.Extensions.Logging.ILogger{Server.Services.PostgresDbService})">
+            <summary>
+            Constructor
+            </summary>
+            <param name="httpClientFactory"></param>
+            <param name="configuration"></param>
+            <param name="dbContext"></param>
+            <param name="logger"></param>
+        </member>
+        <member name="M:Server.Services.PostgresDbService.SearchArticlesAsync(BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest)">
+            <summary>
+            
+            </summary>
+            <param name="request"></param>
+            <returns></returns>
+        </member>
+        <member name="T:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.Page">
+            <summary>
+            Page number (1-based). Default is 1.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.PageSize">
+            <summary>
+            Page size. Default is 20.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.SearchTerm">
+            <summary>
+            To search for articles by name. Partial matches allowed.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.ArticleIds">
+            <summary>
+            To filter by specific article IDs. If provided, only these articles will be returned.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.UserId">
+            <summary>
+            Search all articles sold by a specific user.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.OnlyFromFollowing">
+            <summary>
+            If true, return only articles sold by users that the requesting user follows. Requires UserId to be set.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.MinPrice">
+            <summary>
+            Filter by price range.
+            </summary>
+            Min price
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.MaxPrice">
+            Max price
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.IncludeSellerDetails">
+            <summary>
+            To include seller details in the search results.
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.OrderBy">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="P:BuyAndRent.Shared.Dtos.DataStorageService.ArticleSearchRequest.IsDescending">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="T:Program">
+            <summary>
+            Auto-generated public partial Program class for top-level statement apps.
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.CreateDocumentationId(System.Type)">
+            <summary>
+            Generates a documentation comment ID for a type.
+            Example: T:Namespace.Outer+Inner`1 becomes T:Namespace.Outer.Inner`1
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.CreateDocumentationId(System.Reflection.PropertyInfo)">
+            <summary>
+            Generates a documentation comment ID for a property.
+            Example: P:Namespace.ContainingType.PropertyName or for an indexer P:Namespace.ContainingType.Item(System.Int32)
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.CreateDocumentationId(System.Type,System.String)">
+            <summary>
+            Generates a documentation comment ID for a property given its container type and property name.
+            Example: P:Namespace.ContainingType.PropertyName
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.CreateDocumentationId(System.Reflection.MethodInfo)">
+            <summary>
+            Generates a documentation comment ID for a method (or constructor).
+            For example:
+              M:Namespace.ContainingType.MethodName(ParamType1,ParamType2)~ReturnType
+              M:Namespace.ContainingType.#ctor(ParamType)
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.GetTypeDocId(System.Type,System.Boolean,System.Boolean)">
+            <summary>
+            Generates a documentation ID string for a type.
+            This method handles nested types (replacing '+' with '.'),
+            generic types, arrays, pointers, by-ref types, and generic parameters.
+            The <paramref name="includeGenericArguments"/> flag controls whether
+            constructed generic type arguments are emitted, while <paramref name="omitGenericArity"/>
+            controls whether the generic arity marker (e.g. "`1") is appended.
+            </summary>
+        </member>
+        <member name="M:Microsoft.AspNetCore.OpenApi.Generated.DocumentationCommentIdHelper.NormalizeDocId(System.String)">
+            <summary>
+            Normalizes a documentation comment ID to match the compiler-style format.
+            Strips the return type suffix for ordinary methods but retains it for conversion operators.
+            </summary>
+            <param name="docId">The documentation comment ID to normalize.</param>
+            <returns>The normalized documentation comment ID.</returns>
+        </member>
+    </members>
+</doc>

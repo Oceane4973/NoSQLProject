@@ -1,9 +1,9 @@
-﻿using BuyAndRent.Shared.Dtos.DataStorageService;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Models.Domains;
-using Server.Models.Dtos;
-using Server.Models.Dtos.Enums;
+using Server.Models.Requests;
+using Server.Models.Requests.Enums;
+using Server.Models.Responses;
 
 namespace Server.Services;
 

@@ -1,6 +1,6 @@
-﻿using Server.Models.Dtos.Enums;
+﻿using Server.Models.Requests.Enums;
 
-namespace BuyAndRent.Shared.Dtos.DataStorageService;
+namespace Server.Models.Requests;
 
 /// <summary>
 /// 

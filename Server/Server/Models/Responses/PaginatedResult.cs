@@ -1,4 +1,4 @@
-﻿namespace Server.Models.Dtos
+﻿namespace Server.Models.Responses
 {
     /// <summary>
     /// Paginated result container

@@ -1,4 +1,4 @@
-﻿namespace Server.Models.Dtos.Enums;
+﻿namespace Server.Models.Requests.Enums;
 
 /// <summary>
 /// 

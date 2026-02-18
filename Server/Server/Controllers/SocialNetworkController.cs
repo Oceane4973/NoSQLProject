@@ -1,7 +1,7 @@
-﻿using BuyAndRent.Shared.Dtos.DataStorageService;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Server.Models.Domains;
-using Server.Models.Dtos;
+using Server.Models.Requests;
+using Server.Models.Responses;
 using Server.Services;
 
 namespace Server.Controllers
