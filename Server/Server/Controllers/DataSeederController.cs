@@ -90,11 +90,14 @@ public class DataSeederController : ControllerBase
     [HttpPost("social-graph")]
     public async Task<IActionResult> BulkImportSocialGraph([FromBody] List<FollowDto> follows)
     {
-        var entities = follows.Select(f => new UserFollow
-        {
-            FollowerId = f.FollowerId,
-            FollowingId = f.FollowingId
-        }).ToList();
+        var entities = follows
+            .GroupBy(f => new { f.FollowerId, f.FollowingId })
+            .Select(g => new UserFollow
+            {
+                FollowerId = g.Key.FollowerId,
+                FollowingId = g.Key.FollowingId
+            })
+            .ToList();
 
         await _context.BulkInsertAsync(entities, b => b.IncludeGraph = false);
 

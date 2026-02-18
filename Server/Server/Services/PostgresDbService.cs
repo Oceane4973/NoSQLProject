@@ -50,33 +50,26 @@ public class PostgresDbService : IPostgresDbService
 
         if (request.UserId.HasValue)
         {
-            var targetUserIds = new List<Guid> { request.UserId.Value };
+            var currentLevelIds = new HashSet<Guid> { request.UserId.Value };
+            var allReachableUserIds = new HashSet<Guid> { request.UserId.Value };
 
-            if (request.FollowingLevel > 0)
+            for (int i = 0; i < request.FollowingLevel; i++)
             {
-                var recursiveSql = @"
-                WITH RECURSIVE SocialCircle AS (
-                    -- Niveau 0 : l'utilisateur de départ
-                    SELECT CAST({0} AS UUID) as UserId, 0 as Level
-                    UNION
-                    -- Niveaux suivants : ceux que les gens du niveau précédent suivent
-                    SELECT uf.""FollowingId"", sc.Level + 1
-                    FROM ""UserFollow"" uf
-                    INNER JOIN SocialCircle sc ON uf.""FollowerId"" = sc.UserId
-                    WHERE sc.Level < {1}
-                )
-                SELECT DISTINCT UserId FROM SocialCircle";
-
-                var circleIds = await _dbContext.Database
-                    .SqlQueryRaw<Guid>(recursiveSql, request.UserId.Value, request.FollowingLevel)
+                var nextLevelIds = await _dbContext.UserFollows
+                    .Where(uf => currentLevelIds.Contains(uf.FollowerId))
+                    .Select(uf => uf.FollowingId)
+                    .Distinct()
                     .ToListAsync();
 
-                query = query.Where(a => a.Orders.Any(o => circleIds.Contains(o.UserId)));
+                var newIds = nextLevelIds.Except(allReachableUserIds).ToList();
+
+                if (!newIds.Any()) break;
+
+                foreach (var id in newIds) allReachableUserIds.Add(id);
+                currentLevelIds = new HashSet<Guid>(newIds);
             }
-            else
-            {
-                query = query.Where(a => a.Orders.Any(o => o.UserId == request.UserId));
-            }
+
+            query = query.Where(a => a.Orders.Any(o => allReachableUserIds.Contains(o.UserId)));
         }
 
         if (request.ArticleIds != null && request.ArticleIds.Any())
