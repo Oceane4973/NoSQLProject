@@ -10,11 +10,13 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
       - ConnectionStrings__DefaultConnection=Host=postgres-db;Port=5432;Database=${POSTGRES_DB_NAME};Username=${POSTGRES_DB_USER};Password=${POSTGRES_DB_PASSWORD};Trust Server Certificate=true
-      - NEO4J_BOLT_URL=${NEO4J_BOLT_URL}
-      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_BOLT_URL=bolt://tpnosql_neo4j:7687
+      - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     depends_on:
       postgres-db:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
     networks:
       - nosql-network
@@ -60,8 +62,28 @@ services:
     networks:
       - nosql-network
 
+  neo4j:
+    image: neo4j:2026.01
+    container_name: tpnosql_neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+    ports:
+      - "7474:7474"  # Interface web
+      - "7687:7687"  # Bolt protocol
+    volumes:
+      - tpnosql_neo4j_data:/data
+    networks:
+      - nosql-network
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
 volumes:
   pg_data:
+  tpnosql_neo4j_data:
 
 networks:
   nosql-network:

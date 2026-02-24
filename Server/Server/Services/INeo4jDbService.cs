@@ -189,12 +189,16 @@ public class Neo4jDbService : IDbService
 
             await session.ExecuteWriteAsync(async tx =>
             {
-                await tx.RunAsync(@"
-                    UNWIND $follows as follow
-                    MATCH (follower:User {id: follow.followerId})
-                    MATCH (following:User {id: follow.followingId})
-                    MERGE (follower)-[:FOLLOWS]->(following)",
+                var result = await tx.RunAsync(@"
+                UNWIND $follows as follow
+                MERGE (follower:User {id: follow.followerId})
+                MERGE (following:User {id: follow.followingId})
+                MERGE (follower)-[:FOLLOWS]->(following)
+                RETURN count(*) as created",
                     new { follows = batch });
+
+                var summary = await result.ConsumeAsync();
+                _logger.LogInformation($"FOLLOWS batch processed. Relationships created: {summary.Counters.RelationshipsCreated}");
             });
         }
     }
