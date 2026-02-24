@@ -33,55 +33,52 @@ public class Neo4jDbService : IDbService
     /// <param name="request"></param>
     /// <returns></returns>
     public async Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request)
+{
+    var stopwatch = Stopwatch.StartNew();
+    await using var session = _driver.AsyncSession();
+
+    var result = await session.ExecuteReadAsync(async tx =>
     {
-        var stopwatch = Stopwatch.StartNew();
+        var cypher = BuildCypherForEntity(request);
+        _logger.LogInformation("Neo4j Query: {Cypher}", cypher);
 
-        await using var session = _driver.AsyncSession();
-        var result = await session.ExecuteReadAsync(async tx =>
+        var dataResult = await tx.RunAsync(cypher);
+        var items = new List<object>();
+
+        await foreach (var record in dataResult)
         {
-            var cypher = BuildCypherForEntity(request);
+            _logger.LogDebug("Neo4j Record Keys: {Keys}", string.Join(", ", record.Keys));
 
-            var parts = cypher.Split(new[] { "RETURN" }, StringSplitOptions.None);
-            var matchPart = parts[0];
-
-            var countCypher = $"{matchPart} RETURN count(*) as total";
-            var countResult = await tx.RunAsync(countCypher);
-            var totalRecord = await countResult.SingleAsync();
-            var totalCount = totalRecord["total"].As<int>();
-
-            var cleanDataCypher = cypher.Split("LIMIT")[0].Split("SKIP")[0];
-            var dataCypher = $"{cleanDataCypher} SKIP {(request.Page - 1) * request.PageSize} LIMIT {request.PageSize}";
-
-            var dataResult = await tx.RunAsync(dataCypher);
-
-            var items = new List<object>();
-            await foreach (var record in dataResult)
+            if (record.Values.Count == 1 && record.Values.First().Value is INode node)
             {
-                var values = record.Values.FirstOrDefault().Value;
-
-                if (values is INode node)
-                {
-                    items.Add(node.Properties);
-                }
-                else
-                {
-                    items.Add(record.Values);
-                }
+                items.Add(node.Properties);
             }
-
-            return new PaginatedResult<dynamic>
+            else
             {
-                Items = items.Cast<dynamic>().ToList(),
-                TotalCount = totalCount,
-                Page = request.Page,
-                PageSize = request.PageSize
-            };
-        });
+                var row = record.Values.ToDictionary(kv => kv.Key, kv => kv.Value);
+                
+                items.Add(row);
+            }
+        }
 
-        stopwatch.Stop();
+        var countCypher = cypher.Split("RETURN")[0] + " RETURN count(*)";
+        var countResult = await tx.RunAsync(countCypher);
+        var totalCountRecord = await countResult.SingleAsync();
+        var totalCount = totalCountRecord[0].As<int>();
+
+        return new PaginatedResult<dynamic>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = request.Page,
+            PageSize = request.PageSize
+        };
+    });
+
+    stopwatch.Stop();
         result.RequestTimeInMilliseconds = stopwatch.ElapsedMilliseconds;
-        return result;
-    }
+    return result;
+}
 
     /// <summary>
     /// 
@@ -225,6 +222,7 @@ public class Neo4jDbService : IDbService
     {
         string matchClause;
         string returnClause;
+        string defaultAlias = request.Entity == Entity.Orders ? "r" : "target";
 
         if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
@@ -233,7 +231,7 @@ public class Neo4jDbService : IDbService
                 Entity.Users => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(target:User)",
                 Entity.Articles => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(friend)-[:BOUGHT]->(target:Article)",
                 Entity.Orders => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(u:User)-[r:BOUGHT]->(a:Article)",
-                _ => "n"
+                _ => "(target)"
             };
         }
         else
@@ -243,7 +241,7 @@ public class Neo4jDbService : IDbService
                 Entity.Users => "(target:User)",
                 Entity.Articles => "(target:Article)",
                 Entity.Orders => "(u:User)-[r:BOUGHT]->(a:Article)",
-                _ => "n"
+                _ => "(target)"
             };
         }
 
@@ -251,19 +249,49 @@ public class Neo4jDbService : IDbService
         {
             Entity.Users => "RETURN target",
             Entity.Articles => "RETURN target",
-            Entity.Orders => "RETURN { id: id(r), userId: u.id, articleId: a.id, quantity: r.quantity, totalPrice: r.totalPrice }",
-            _ => "RETURN n"
+            Entity.Orders => "RETURN id(r) as id, u.id as userId, a.id as articleId, r.quantity as quantity, r.totalPrice as totalPrice",
+            _ => "RETURN target"
         };
 
-        var whereClause = "";
-        if (request.Filters.Any())
+        var whereParts = new List<string>();
+        foreach (var filter in request.Filters)
         {
-            var idFilter = request.Filters.FirstOrDefault(f => f.FieldId == 0);
-            if (idFilter != null)
+            string fieldName = request.Entity switch
             {
-                whereClause = $"WHERE target.id = '{idFilter.Value}' OR u.id = '{idFilter.Value}'";
+                Entity.Articles => ((ArticlesFields)filter.FieldId).ToString(),
+                Entity.Users => ((UsersFields)filter.FieldId).ToString(),
+                Entity.Orders => ((OrdersFields)filter.FieldId).ToString(),
+                _ => "Id"
+            };
+
+            string alias;
+            if (request.Entity == Entity.Orders)
+            {
+                alias = fieldName switch
+                {
+                    "UserId" => "u",
+                    "ArticleId" => "a",
+                    "Id" => "r",
+                    _ => "r"
+                };
+            }
+            else
+            {
+                alias = "target";
+            }
+
+            string propertyName = (fieldName == "UserId" || fieldName == "ArticleId" || fieldName == "Id")
+                                  ? "id"
+                                  : fieldName.ToLower();
+
+            if (filter.Operator == FilterOperator.Equals)
+            {
+                var val = filter.Value?.ToString();
+                whereParts.Add($"{alias}.{propertyName} = '{val}'");
             }
         }
+
+        var whereClause = whereParts.Any() ? "WHERE " + string.Join(" AND ", whereParts) : "";
 
         return $"MATCH {matchClause} {whereClause} {returnClause}";
     }

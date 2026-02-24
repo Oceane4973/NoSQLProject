@@ -85,7 +85,7 @@ public class PostgresDbService : IDbService
         // ArticlesFields
         foreach (var filter in request.Filters)
         {
-            query = ApplyArticlesFilter(query, (ArticlesFields)filter.FieldId);
+            query = ApplyArticlesFilter(query, filter);
         }
 
         if (request.OrderByField is ArticlesOrderBy orderBy)
@@ -182,7 +182,7 @@ public class PostgresDbService : IDbService
 
         foreach (var filter in request.Filters)
         {
-            query = ApplyOrdersFilter(query, (OrdersFields)filter.FieldId);
+            query = ApplyOrdersFilter(query, filter);
         }
 
         if (request.OrderByField is OrdersOrderBy orderBy)
@@ -243,12 +243,14 @@ public class PostgresDbService : IDbService
         return allReachableUserIds;
     }
 
-    private static IQueryable<Article> ApplyArticlesFilter(IQueryable<Article> query, ArticlesFields field)
+    private static IQueryable<Article> ApplyArticlesFilter(IQueryable<Article> query, QueryFilter filter)
     {
+        var field = (ArticlesFields)filter.FieldId;
         return field switch
         {
+            ArticlesFields.Id => query.Where(a => a.Id == Guid.Parse(filter.Value.ToString())),
             ArticlesFields.Price => query.Where(a => a.Price > 0),
-            ArticlesFields.Name => query.Where(a => !string.IsNullOrEmpty(a.Name)),
+            ArticlesFields.Name => query.Where(a => a.Name.Contains(filter.Value.ToString())),
             _ => query
         };
     }
@@ -262,11 +264,15 @@ public class PostgresDbService : IDbService
         };
     }
 
-    private static IQueryable<Order> ApplyOrdersFilter(IQueryable<Order> query, OrdersFields field)
+    private static IQueryable<Order> ApplyOrdersFilter(IQueryable<Order> query, QueryFilter filter)
     {
+        var field = (OrdersFields)filter.FieldId;
         return field switch
         {
-            OrdersFields.TotalPrice => query.Where(o => o.TotalPrice > 0),
+            OrdersFields.Id => query.Where(o => o.Id == Guid.Parse(filter.Value.ToString())),
+            OrdersFields.UserId => query.Where(o => o.UserId == Guid.Parse(filter.Value.ToString())),
+            OrdersFields.ArticleId => query.Where(o => o.ArticleId == Guid.Parse(filter.Value.ToString())),
+            OrdersFields.TotalPrice => query.Where(o => o.TotalPrice >= Convert.ToDecimal(filter.Value)),
             _ => query
         };
     }
