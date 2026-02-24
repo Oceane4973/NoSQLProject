@@ -201,7 +201,7 @@ public class PostgresDbService : IDbService
                 o.UserId,
                 o.ArticleId,
                 o.Quantity,
-                TotalPrice = o.Quantity * o.Article.Price
+                o.TotalPrice
             })
             .ToListAsync();
 

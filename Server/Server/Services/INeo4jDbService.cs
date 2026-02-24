@@ -41,18 +41,32 @@ public class Neo4jDbService : IDbService
         {
             var cypher = BuildCypherForEntity(request);
 
-            var countCypher = $"WITH {cypher.Replace("RETURN", "").Replace("SKIP", "").Replace("LIMIT", "")} RETURN count(*) as total";
+            var parts = cypher.Split(new[] { "RETURN" }, StringSplitOptions.None);
+            var matchPart = parts[0];
+
+            var countCypher = $"{matchPart} RETURN count(*) as total";
             var countResult = await tx.RunAsync(countCypher);
             var totalRecord = await countResult.SingleAsync();
             var totalCount = totalRecord["total"].As<int>();
 
-            var dataCypher = $"{cypher} SKIP {(request.Page - 1) * request.PageSize} LIMIT {request.PageSize}";
+            var cleanDataCypher = cypher.Split("LIMIT")[0].Split("SKIP")[0];
+            var dataCypher = $"{cleanDataCypher} SKIP {(request.Page - 1) * request.PageSize} LIMIT {request.PageSize}";
+
             var dataResult = await tx.RunAsync(dataCypher);
 
             var items = new List<object>();
             await foreach (var record in dataResult)
             {
-                items.Add(record.As<Dictionary<string, object>>());
+                var values = record.Values.FirstOrDefault().Value;
+
+                if (values is INode node)
+                {
+                    items.Add(node.Properties);
+                }
+                else
+                {
+                    items.Add(record.Values);
+                }
             }
 
             return new PaginatedResult<dynamic>
@@ -190,11 +204,10 @@ public class Neo4jDbService : IDbService
             await session.ExecuteWriteAsync(async tx =>
             {
                 var result = await tx.RunAsync(@"
-                UNWIND $follows as follow
-                MERGE (follower:User {id: follow.followerId})
-                MERGE (following:User {id: follow.followingId})
-                MERGE (follower)-[:FOLLOWS]->(following)
-                RETURN count(*) as created",
+                    UNWIND $follows as follow
+                    MATCH (follower:User {id: follow.followerId})
+                    MATCH (following:User {id: follow.followingId})
+                    MERGE (follower)-[:FOLLOWS]->(following)",
                     new { follows = batch });
 
                 var summary = await result.ConsumeAsync();
@@ -210,15 +223,48 @@ public class Neo4jDbService : IDbService
     /// <returns></returns>
     private string BuildCypherForEntity(QueryBuilderRequest request)
     {
-        return request.Entity switch
+        string matchClause;
+        string returnClause;
+
+        if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
-            Entity.Users => "MATCH (u:User) RETURN u LIMIT 20",
-            Entity.Articles => "MATCH (a:Article) RETURN a LIMIT 20",
-            Entity.Orders => """
-                MATCH (u:User)-[r:BOUGHT]->(a:Article)
-                RETURN u.name as userName, r.quantity, r.totalPrice, a.name as articleName LIMIT 20
-                """,
-            _ => "RETURN 'Entity not supported' as message LIMIT 1"
+            matchClause = request.Entity switch
+            {
+                Entity.Users => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(target:User)",
+                Entity.Articles => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(friend)-[:BOUGHT]->(target:Article)",
+                Entity.Orders => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(u:User)-[r:BOUGHT]->(a:Article)",
+                _ => "n"
+            };
+        }
+        else
+        {
+            matchClause = request.Entity switch
+            {
+                Entity.Users => "(target:User)",
+                Entity.Articles => "(target:Article)",
+                Entity.Orders => "(u:User)-[r:BOUGHT]->(a:Article)",
+                _ => "n"
+            };
+        }
+
+        returnClause = request.Entity switch
+        {
+            Entity.Users => "RETURN target",
+            Entity.Articles => "RETURN target",
+            Entity.Orders => "RETURN { id: id(r), userId: u.id, articleId: a.id, quantity: r.quantity, totalPrice: r.totalPrice }",
+            _ => "RETURN n"
         };
+
+        var whereClause = "";
+        if (request.Filters.Any())
+        {
+            var idFilter = request.Filters.FirstOrDefault(f => f.FieldId == 0);
+            if (idFilter != null)
+            {
+                whereClause = $"WHERE target.id = '{idFilter.Value}' OR u.id = '{idFilter.Value}'";
+            }
+        }
+
+        return $"MATCH {matchClause} {whereClause} {returnClause}";
     }
 }

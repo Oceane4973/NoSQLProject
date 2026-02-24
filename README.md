@@ -63,14 +63,23 @@ Le logiciel doit permettre d’exécuter et mesurer les performances des requêt
 1. Installer docker
 2. CLoner le repo
 3. Renommer `.env.example` en `.env`
-4. Se rendre sur `https://console.neo4j.io/` et s'authentifier. Des identifiants seront alors affichés sur le site. Copiez-coller les valeurs dans le `.env` : 
+4. Modifier au besoin des valeur du fichier `.env` : 
 ```
-NEO4J_USER=<USER>
-NEO4J_PASSWORD=<PASSWORD>
-```
-5. Créer une instance, puis copier l'`identifiant de l'instance`. Modifier la variable du fichier `.env` : 
-```
-NEO4J_BOLT_URL=neo4j+s://<ID>.databases.neo4j.io
+# Application Environment
+ASPNETCORE_ENVIRONMENT=Development
+
+# Postgres
+POSTGRES_DB_USER=postgres
+POSTGRES_DB_PASSWORD=<YOUR_PASSWORD>
+POSTGRES_DB_NAME=nosqlproject
+
+# Neo4j
+NEO4J_PASSWORD=<YOUR_PASSWORD>
+
+# Seeder
+SEEDER_USER_COUNT=1000
+SEEDER_ARTICLE_COUNT=500
+SEEDER_ORDER_COUNT=5000
 ```
 6. Ouvrir un terminal et lancer la commande : 
 ```bash
