@@ -75,7 +75,6 @@ public class PostgresDbService : IDbService
     {
         var query = _context.Articles.AsQueryable();
 
-        // FollowingLevel
         if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
             var reachableUsers = await GetReachableUsersAsync(request.UserId.Value, request.FollowingLevel.Value);
@@ -98,6 +97,7 @@ public class PostgresDbService : IDbService
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(a => new { a.Id, a.Name, a.Price })
+            .Distinct()
             .Cast<dynamic>()
             .ToListAsync();
 
@@ -129,7 +129,7 @@ public class PostgresDbService : IDbService
 
         foreach (var filter in request.Filters)
         {
-            query = ApplyUsersFilter(query, (UsersFields)filter.FieldId);
+            query = ApplyUsersFilter(query, filter);
         }
 
         if (request.OrderByField is UsersOrderBy orderBy)
@@ -223,23 +223,25 @@ public class PostgresDbService : IDbService
     private async Task<HashSet<Guid>> GetReachableUsersAsync(Guid userId, int levels)
     {
         var currentLevelIds = new HashSet<Guid> { userId };
-        var allReachableUserIds = new HashSet<Guid> { userId };
+        var allReachableUserIds = new HashSet<Guid>();
 
         for (int i = 0; i < levels; i++)
         {
             var nextLevelIds = await _context.UserFollows
-                .Where(uf => currentLevelIds.Contains(uf.FollowerId))
-                .Select(uf => uf.FollowingId)
+                .Where(f => currentLevelIds.Contains(f.FollowerId))
+                .Select(f => f.FollowingId)
                 .Distinct()
                 .ToListAsync();
 
-            var newIds = nextLevelIds.Except(allReachableUserIds);
-            if (!newIds.Any()) break;
-
-            foreach (var id in newIds) allReachableUserIds.Add(id);
-            currentLevelIds = new HashSet<Guid>(newIds);
+            currentLevelIds.Clear();
+            foreach (var id in nextLevelIds)
+            {
+                if (allReachableUserIds.Add(id))
+                {
+                    currentLevelIds.Add(id);
+                }
+            }
         }
-
         return allReachableUserIds;
     }
 
@@ -255,10 +257,14 @@ public class PostgresDbService : IDbService
         };
     }
 
-    private static IQueryable<User> ApplyUsersFilter(IQueryable<User> query, UsersFields field)
+    private static IQueryable<User> ApplyUsersFilter(IQueryable<User> query, QueryFilter filter)
     {
+        var field = (UsersFields)filter.FieldId;
         return field switch
         {
+            UsersFields.Id => query.Where(u => u.Id == Guid.Parse(filter.Value.ToString())),
+            UsersFields.UserName => query.Where(u => u.Name.Contains(filter.Value.ToString())),
+            UsersFields.Email => query.Where(u => u.Email.Contains(filter.Value.ToString())),
             UsersFields.FollowersCount => query.Where(u => u.Followers.Any()),
             _ => query
         };

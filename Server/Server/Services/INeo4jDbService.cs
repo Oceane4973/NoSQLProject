@@ -33,52 +33,51 @@ public class Neo4jDbService : IDbService
     /// <param name="request"></param>
     /// <returns></returns>
     public async Task<PaginatedResult<dynamic>> ExecuteQueryAsync(QueryBuilderRequest request)
-{
-    var stopwatch = Stopwatch.StartNew();
-    await using var session = _driver.AsyncSession();
-
-    var result = await session.ExecuteReadAsync(async tx =>
     {
-        var cypher = BuildCypherForEntity(request);
-        _logger.LogInformation("Neo4j Query: {Cypher}", cypher);
+        var stopwatch = Stopwatch.StartNew();
+        await using var session = _driver.AsyncSession();
 
-        var dataResult = await tx.RunAsync(cypher);
-        var items = new List<object>();
-
-        await foreach (var record in dataResult)
+        return await session.ExecuteReadAsync(async tx =>
         {
-            _logger.LogDebug("Neo4j Record Keys: {Keys}", string.Join(", ", record.Keys));
+            var cypher = BuildCypherForEntity(request);
 
-            if (record.Values.Count == 1 && record.Values.First().Value is INode node)
+            var skip = (request.Page - 1) * request.PageSize;
+            var limit = request.PageSize;
+            var paginatedCypher = $"{cypher} SKIP {skip} LIMIT {limit}";
+
+            _logger.LogInformation("Neo4j Paginated Query: {Cypher}", paginatedCypher);
+
+            var dataResult = await tx.RunAsync(paginatedCypher);
+            var items = new List<object>();
+
+            await foreach (var record in dataResult)
             {
-                items.Add(node.Properties);
+                if (record.Values.Count == 1 && record.Values.First().Value is INode node)
+                    items.Add(node.Properties);
+                else
+                    items.Add(record.Values.ToDictionary(kv => kv.Key, kv => kv.Value));
             }
-            else
+
+            var queryPart = cypher.Split(new[] { "RETURN" }, StringSplitOptions.None)[0];
+            string aliasToCount = request.Entity == Entity.Orders ? "r" : "target";
+
+            var countCypher = $"{queryPart} RETURN count(DISTINCT {aliasToCount}) as total";
+            var countResult = await tx.RunAsync(countCypher);
+            var countRecords = await countResult.ToListAsync();
+
+            int totalCount = countRecords.Any() ? (int)countRecords[0]["total"].As<long>() : 0;
+
+            stopwatch.Stop();
+            return new PaginatedResult<dynamic>
             {
-                var row = record.Values.ToDictionary(kv => kv.Key, kv => kv.Value);
-                
-                items.Add(row);
-            }
-        }
-
-        var countCypher = cypher.Split("RETURN")[0] + " RETURN count(*)";
-        var countResult = await tx.RunAsync(countCypher);
-        var totalCountRecord = await countResult.SingleAsync();
-        var totalCount = totalCountRecord[0].As<int>();
-
-        return new PaginatedResult<dynamic>
-        {
-            Items = items,
-            TotalCount = totalCount,
-            Page = request.Page,
-            PageSize = request.PageSize
-        };
-    });
-
-    stopwatch.Stop();
-        result.RequestTimeInMilliseconds = stopwatch.ElapsedMilliseconds;
-    return result;
-}
+                Items = items,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize,
+                RequestTimeInMilliseconds = stopwatch.ElapsedMilliseconds
+            };
+        });
+    }
 
     /// <summary>
     /// 
@@ -222,14 +221,13 @@ public class Neo4jDbService : IDbService
     {
         string matchClause;
         string returnClause;
-        string defaultAlias = request.Entity == Entity.Orders ? "r" : "target";
 
         if (request.UserId.HasValue && request.FollowingLevel.HasValue && request.FollowingLevel > 0)
         {
             matchClause = request.Entity switch
             {
                 Entity.Users => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(target:User)",
-                Entity.Articles => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(friend)-[:BOUGHT]->(target:Article)",
+                Entity.Articles => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(friend:User)-[:BOUGHT]->(target:Article)",
                 Entity.Orders => $"(me:User {{id: '{request.UserId}'}})-[:FOLLOWS*1..{request.FollowingLevel}]->(u:User)-[r:BOUGHT]->(a:Article)",
                 _ => "(target)"
             };
@@ -247,8 +245,8 @@ public class Neo4jDbService : IDbService
 
         returnClause = request.Entity switch
         {
-            Entity.Users => "RETURN target",
-            Entity.Articles => "RETURN target",
+            Entity.Users => "RETURN target { .*, followingCount: COUNT { (target)-[:FOLLOWS]->() }, followersCount: COUNT { (target)<-[:FOLLOWS]-() } } as user",
+            Entity.Articles => "RETURN DISTINCT target",
             Entity.Orders => "RETURN id(r) as id, u.id as userId, a.id as articleId, r.quantity as quantity, r.totalPrice as totalPrice",
             _ => "RETURN target"
         };
@@ -264,25 +262,17 @@ public class Neo4jDbService : IDbService
                 _ => "Id"
             };
 
-            string alias;
-            if (request.Entity == Entity.Orders)
-            {
-                alias = fieldName switch
-                {
-                    "UserId" => "u",
-                    "ArticleId" => "a",
-                    "Id" => "r",
-                    _ => "r"
-                };
-            }
-            else
-            {
-                alias = "target";
-            }
+            string alias = request.Entity == Entity.Orders ?
+                (fieldName == "UserId" ? "u" : (fieldName == "ArticleId" ? "a" : "r")) : "target";
 
-            string propertyName = (fieldName == "UserId" || fieldName == "ArticleId" || fieldName == "Id")
-                                  ? "id"
-                                  : fieldName.ToLower();
+            string propertyName = fieldName switch
+            {
+                "UserId" or "ArticleId" or "Id" => "id",
+                "UserName" => "userName",
+                "FollowersCount" => "followersCount",
+                "FollowingCount" => "followingCount",
+                _ => char.ToLower(fieldName[0]) + fieldName.Substring(1)
+            };
 
             if (filter.Operator == FilterOperator.Equals)
             {

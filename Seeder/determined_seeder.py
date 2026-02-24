@@ -51,31 +51,43 @@ def generate_deterministic_articles() -> list[dict]:
     ]
 
 def generate_deterministic_graph(users: list[dict]) -> list[dict]:
-    """Structure en cascade C1 -> C2 -> C3 -> C4"""
     follows = []
     
-    # Définition des groupes par indices (0-indexed)
-    # C1 = {U1..U5}, C2 = {U1..U10}, C3 = {U11..U20}, C4 = {U21..U30}
-    c1_idx = range(0, 5)   # U1 à U5
-    c2_idx = range(0, 10)  # U1 à U10
-    c3_idx = range(10, 20) # U11 à U20
-    c4_idx = range(20, 30) # U21 à U30
+    c1_idx = range(1, 5)   # U2,U3,U4,U5
+    c2_idx = range(5, 10)  # U6-U10
+    c3_idx = range(10, 20) 
+    c4_idx = range(20, 30) 
 
-    # Chaque utilisateur dans C1 suit U1...U10 (C2)
-    for i in c1_idx:
-        for j in c2_idx:
-            if i != j: # Pas d'auto-follow
-                follows.append({"followerId": users[i]["id"], "followingId": users[j]["id"]})
+    # U2,U3,U4,U5 SUIVENT U1 → FollowersCount(U1) = 4
+    for i in c1_idx:  # U2-U5
+        follows.append({
+            "followerId": users[i]["id"],    # U2-U5
+            "followingId": users[0]["id"]    # → U1
+        })
 
-    # Chaque utilisateur dans C2 suit U11...U20 (C3)
+    # U6-U10 SUIVENT C1 (U2-U5)
     for i in c2_idx:
-        for j in c3_idx:
-            follows.append({"followerId": users[i]["id"], "followingId": users[j]["id"]})
+        for j in c1_idx:
+            follows.append({
+                "followerId": users[i]["id"], 
+                "followingId": users[j]["id"]
+            })
 
-    # Chaque utilisateur dans C3 suit U21...U30 (C4)
+    # U11-U20 SUIVENT C2 (U6-U10)
     for i in c3_idx:
-        for j in c4_idx:
-            follows.append({"followerId": users[i]["id"], "followingId": users[j]["id"]})
+        for j in c2_idx:
+            follows.append({
+                "followerId": users[i]["id"], 
+                "followingId": users[j]["id"]
+            })
+
+    # U21-U30 SUIVENT C3 (U11-U20)
+    for i in c4_idx:
+        for j in c3_idx:
+            follows.append({
+                "followerId": users[i]["id"], 
+                "followingId": users[j]["id"]
+            })
 
     return follows
 

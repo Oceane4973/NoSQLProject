@@ -8,7 +8,6 @@ using Server.Services;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[ApiExplorerSettings(IgnoreApi = true)]
 public class DataSeederController : ControllerBase
 {
     private readonly PostgresDbService _pgService;
